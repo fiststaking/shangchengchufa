@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>生态商城</title>
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<header>
+  <h1>生态商城</h1>
+  <div class="wallet">
+    <span id="chainBadge" class="badge">未连接</span>
+    <button id="connectBtn">连接钱包</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="buy">购买</button>
+  <button class="tab" data-tab="orders">我的订单</button>
+  <button class="tab" data-tab="merchant">商家中心</button>
+  <button class="tab" data-tab="admin">管理</button>
+  <button class="tab" data-tab="help">说明</button>
+</nav>
+
+<main>
+  <!-- ───────────────────────── 购买 ───────────────────────── -->
+  <section id="tab-buy" class="panel active">
+    <div class="card">
+      <h2>1. 选择金额</h2>
+      <label>产品金额（150 的整倍数，150 ~ 30000）</label>
+      <select id="amountSelect"><option value="">加载中…</option></select>
+
+      <h2>2. 选择产品</h2>
+      <label>该金额下的产品</label>
+      <select id="productSelect" disabled><option value="">请先选择金额</option></select>
+      <p id="productMeta" class="muted"></p>
+
+      <h2>3. 填写收货信息</h2>
+      <p class="muted">
+        以下内容会先用商家公钥加密再上链。商家在你完成理财、解锁订单之前看不到这些内容。
+      </p>
+      <label>收货地址</label>
+      <input id="fAddress" placeholder="省 / 市 / 区 / 详细地址" maxlength="200" />
+      <label>联系人</label>
+      <input id="fReceiver" placeholder="收件人姓名" maxlength="40" />
+      <label>联系电话</label>
+      <input id="fPhone" placeholder="手机号" maxlength="40" />
+      <label>备注（可选）</label>
+      <input id="fNote" placeholder="例如：工作日送达" maxlength="80" />
+
+      <h2>4. 支付</h2>
+      <div class="row">
+        <label class="radio"><input type="radio" name="pay" value="usdt" checked /> USDT</label>
+        <label class="radio"><input type="radio" name="pay" value="bnb" /> BNB</label>
+      </div>
+      <p id="quoteLine" class="muted"></p>
+      <button id="buyBtn" class="primary" disabled>存入合约</button>
+      <p id="buyMsg" class="msg"></p>
+    </div>
+
+    <div class="card note">
+      <h3>下单后请务必完成理财</h3>
+      <p>
+        下单后 50% 会立刻退回你的钱包。请把这笔钱拿去理财平台存入（推荐人自己填）。
+        存入金额需要达到<strong>本单标价的一半（可少 10%，因为 BNB 价格会波动）</strong>，
+        再回到「我的订单」点「解锁」，商家才能看到你的收货地址并发货。
+      </p>
+      <p class="warn">不理财 = 收不到货，且已分配的资金不可退回。</p>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 我的订单 ───────────────────────── -->
+  <section id="tab-orders" class="panel">
+    <div class="card">
+      <h2>我的订单</h2>
+      <button id="refreshOrders" class="ghost">刷新</button>
+      <div id="ordersList" class="list"></div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 商家 ───────────────────────── -->
+  <section id="tab-merchant" class="panel">
+    <div class="card">
+      <h2>商家密钥</h2>
+      <p class="muted">
+        密钥由你的<strong>钱包签名</strong>确定性派生，不需要生成文件、也不需要备份。
+        换电脑或换浏览器时，只要用同一个钱包重新连一次并签名，就能解开全部历史订单。
+      </p>
+      <button id="genKey" class="ghost">查看我的加密公钥</button>
+      <button id="publishKey" class="ghost" disabled>把公钥登记到链上</button>
+      <button id="loadKey" class="ghost">显示平台公钥（管理员用）</button>
+      <p id="keyStatus" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>我的商品</h2>
+      <label>商品名称</label>
+      <input id="mName" maxlength="80" />
+      <label>金额（150 的整倍数）</label>
+      <input id="mAmount" type="number" step="150" min="150" max="30000" />
+      <button id="mSubmit" class="primary">提交商品（待审核）</button>
+      <div id="mySubs" class="list"></div>
+    </div>
+
+    <div class="card">
+      <h2>待发货订单</h2>
+      <p class="muted">只有买家已解锁的订单才会出现在这里，并且可以解密收货信息。</p>
+      <button id="loadSupplierOrders" class="ghost">加载</button>
+      <div id="supplierOrders" class="list"></div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 管理 ───────────────────────── -->
+  <section id="tab-admin" class="panel">
+    <div class="card">
+      <h2>管理面板</h2>
+      <p class="muted">仅 owner 与额外管理员可见/可用。运营分红池地址没有任何权限。</p>
+      <p id="adminStatus" class="muted"></p>
+      <div class="grid2">
+        <div>
+          <h3>上架商品</h3>
+          <label>名称</label><input id="aName" maxlength="80" />
+          <label>金额</label><input id="aAmount" type="number" step="150" min="150" max="30000" />
+          <label>供货商地址</label><input id="aSupplier" placeholder="0x..." />
+          <button id="aAddProduct" class="primary">添加</button>
+        </div>
+        <div>
+          <h3>分红池</h3>
+          <label>池类型</label>
+          <select id="aPoolKind">
+            <option value="0">原始股东 (5%)</option>
+            <option value="1">联创 (5%)</option>
+            <option value="2">运营 (5%，无权限)</option>
+          </select>
+          <label>地址</label><input id="aPoolAddr" placeholder="0x..." />
+          <button id="aAddPool" class="ghost">添加</button>
+          <button id="aRemovePool" class="ghost">移除</button>
+          <div id="poolView" class="list"></div>
+        </div>
+      </div>
+      <h3>订单解密（客服 / 纠纷处理）</h3>
+      <p class="muted">
+        平台密钥由 owner 或任一额外管理员的钱包签名派生（同一把，无需共享私钥文件）。
+        输入订单号即可用当前钱包签名解密收货信息。
+      </p>
+      <div class="row">
+        <input id="aOrderId" type="number" min="0" placeholder="订单号" style="max-width:160px" />
+        <button id="aDecrypt" class="ghost">解密</button>
+      </div>
+      <div id="aDecryptOut"></div>
+
+      <h3>其他</h3>
+      <button id="aPause" class="ghost">暂停/恢复下单</button>
+      <p id="adminMsg" class="msg"></p>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── 说明 ───────────────────────── -->
+  <section id="tab-help" class="panel">
+    <div class="card">
+      <h2>规则速览</h2>
+      <table>
+        <tr><th>比例</th><th>去向</th></tr>
+        <tr><td>50%</td><td>退回买家自己的钱包（当场到账）</td></tr>
+        <tr><td>25%</td><td>商品供货商</td></tr>
+        <tr><td>10%</td><td>自动买入 FISTDAO 并销毁</td></tr>
+        <tr><td>5%</td><td>原始股东池（均分）</td></tr>
+        <tr><td>5%</td><td>联创池（均分）</td></tr>
+        <tr><td>5%</td><td>运营地址池（均分，仅收款）</td></tr>
+      </table>
+      <h3>解锁规则</h3>
+      <p>
+        每笔订单都需要在<strong>下单之后</strong>新增「本单标价的一半」的理财本金，才能解锁并发货。
+        因为理财按 BNB 计价、价格会波动，系统允许<strong>少 10%</strong>（例如标价 1500，标价一半是 750，
+        实际存入 675 即算达标）。第一笔的本金不能重复用于第二笔。只统计理财本金，不统计其他质押。
+      </p>
+      <h3>隐私说明</h3>
+      <p>
+        收货信息是加密上链的，只有你、管理员和该商品供货商（解锁后）能解密。
+        但<strong>订单金额、购买时间、商品编号是公开的</strong>，任何人都能在区块浏览器查到。
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span id="footerStatus" class="muted"></span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>A 钱包分发器</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --card: #171b23;
+    --line: #262c37;
+    --text: #e6e9ef;
+    --muted: #9aa4b2;
+    --accent: #3b82f6;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  .wallet { display: flex; align-items: center; gap: 10px; }
+  .badge {
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #232a36;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .badge.ok { background: #13351f; color: var(--ok); }
+  main { padding: 20px; max-width: 980px; margin: 0 auto; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card h2 { font-size: 16px; margin: 0 0 12px; }
+  .card h3 { font-size: 14px; margin: 16px 0 8px; color: var(--muted); }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea {
+    width: 100%;
+    padding: 9px 11px;
+    background: #0f131a;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  textarea { min-height: 92px; resize: vertical; }
+  input:focus, select:focus, textarea:focus {
+    outline: 1px solid var(--accent);
+    border-color: var(--accent);
+  }
+  button {
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #1e2530;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 10px;
+  }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.ghost { background: transparent; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row > * { margin-top: 0; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #0f131a;
+  }
+  .stat .k { font-size: 12px; color: var(--muted); }
+  .stat .v { font-size: 17px; font-weight: 600; margin-top: 2px; word-break: break-all; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .warn { color: var(--warn); font-size: 13px; }
+  .msg { font-size: 13px; min-height: 20px; }
+  .msg.ok { color: var(--ok); }
+  .msg.err { color: var(--err); }
+  .list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .item {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .item .top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .item .title { font-weight: 600; font-family: ui-monospace, Consolas, monospace; }
+  .item .sub { color: var(--muted); margin-top: 4px; }
+  .tag {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: #232a36;
+    color: var(--muted);
+  }
+  .tag.ok { background: #13351f; color: var(--ok); }
+  .tag.warn { background: #3a2a08; color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  a { color: var(--accent); text-decoration: none; }
+  footer { padding: 14px 20px 30px; text-align: center; border-top: 1px solid var(--line); }
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>A 钱包分发器</h1>
+  <div class="wallet">
+    <span id="chainBadge" class="badge">未连接</span>
+    <button id="connectBtn">连接钱包</button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <h2>合约</h2>
+    <label>选择分发合约</label>
+    <select id="contractSelect"></select>
+    <label>或手动输入地址</label>
+    <div class="row">
+      <input id="customAddress" placeholder="0x…" style="flex:1;min-width:220px" />
+      <button id="loadBtn" class="ghost">加载</button>
+      <button id="refreshBtn" class="ghost">刷新</button>
+    </div>
+    <p id="contractMsg" class="muted"></p>
+  </div>
+
+  <div class="card">
+    <h2>概览</h2>
+    <div class="stats" id="overview"></div>
+    <p id="overviewMsg" class="muted"></p>
+  </div>
+
+  <div class="card">
+    <h2>BNB 通道</h2>
+    <p class="muted">
+      触发需附带 <strong>0.001 BNB</strong>，该费用在分发前<strong>原路退回</strong>给调用者，实际成本只有 gas。
+      成员数为 0 或本轮无可分发余额时会直接 revert。
+    </p>
+    <div class="stats" id="bnbStats" style="margin-bottom:12px"></div>
+    <div class="row">
+      <button id="triggerBnbBtn" class="primary">触发 BNB 分发（0.001 BNB）</button>
+      <button id="claimBnbBtn" class="ghost">领取我的 BNB pending</button>
+    </div>
+    <p id="bnbMsg" class="msg"></p>
+  </div>
+
+  <div class="card">
+    <h2>代币通道（USDT 等）</h2>
+    <p class="muted">
+      零手续费、任何人可调。代币需先被 owner 加入白名单；余额只能靠外部直接转入累积。
+      gas 不足 100 万会 revert（单个）或静默跳过（批量）。
+    </p>
+    <div class="row" style="margin-bottom:8px">
+      <button id="triggerAllTokenBtn" class="primary">一键分发全部白名单代币</button>
+    </div>
+    <div id="tokenCards" class="list"></div>
+    <p id="tokenMsg" class="msg"></p>
+  </div>
+
+  <div class="card">
+    <h2>成员</h2>
+    <div class="row" style="margin-bottom:8px">
+      <span id="memberSummary" class="muted"></span>
+    </div>
+    <div id="members" class="list"></div>
+  </div>
+
+  <div class="card" id="adminCard" hidden>
+    <h2>管理（owner）</h2>
+    <h3>添加成员</h3>
+    <label>每行一个地址，或用逗号分隔</label>
+    <textarea id="addMembersInput" placeholder="0xabc…&#10;0xdef…"></textarea>
+    <div class="row">
+      <button id="addMembersBtn" class="primary">批量添加</button>
+    </div>
+
+    <h3>移除成员</h3>
+    <label>单个地址（分发轮次进行中会被拒绝）</label>
+    <div class="row">
+      <input id="removeMemberInput" placeholder="0x…" style="flex:1;min-width:220px" />
+      <button id="removeMemberBtn" class="ghost">移除</button>
+    </div>
+
+    <h3>代币白名单</h3>
+    <label>代币地址</label>
+    <div class="row">
+      <input id="tokenInput" placeholder="0x…" style="flex:1;min-width:220px" />
+      <button id="allowTokenBtn" class="ghost">加入白名单</button>
+      <button id="disallowTokenBtn" class="ghost">移出白名单</button>
+    </div>
+
+    <h3>开关</h3>
+    <div class="row">
+      <button id="pauseBtn" class="ghost">暂停 / 恢复</button>
+    </div>
+    <p id="adminMsg" class="msg"></p>
+  </div>
+
+  <div class="card">
+    <h2>说明</h2>
+    <table>
+      <tr><th>项目</th><th>值</th></tr>
+      <tr><td>链</td><td>BNB Smart Chain (56)</td></tr>
+      <tr><td>触发费</td><td>0.001 BNB（原路退回）</td></tr>
+      <tr><td>最低分发 gas</td><td>1,000,000</td></tr>
+      <tr><td>成员上限</td><td>50</td></tr>
+      <tr><td>分配方式</td><td>(余额 − 累计 pending) ÷ 成员数，余数给最后一名</td></tr>
+    </table>
+    <p class="muted" style="margin-top:12px">
+      转失败成员的份额记入 pending，不会重新摊给其他人，会在该成员下一次分发时合并补发，也可以手动领取。
+    </p>
+  </div>
+</main>
+
+<footer>
+  <span id="footerStatus" class="muted"></span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var ethers = window.ethers;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var CHAIN_ID = 56;
+  var RPC_URL = "https://bsc-dataseed.binance.org";
+  var EXPLORER = "https://bscscan.com";
+  var MIN_TRIGGER_GAS = 2500000;
+
+  var PRESETS = [
+    { label: "0xEDef19…1599", address: "0xEDef19Ac347fbDC8e7572D2553a1C582b6961599" },
+    { label: "0xa3d756…C712", address: "0xa3d756e28191e0B4e4583d05eeDAB4d572fFC712" },
+    { label: "0x464188…7981", address: "0x464188c7FC32DE19790e4bF8214F85a572B97981" }
+  ];
+
+  var DISTRIBUTOR_ABI = [
+    "function TRIGGER_FEE() view returns (uint256)",
+    "function MAX_MEMBERS() view returns (uint256)",
+    "function stakingPool() view returns (address)",
+    "function owner() view returns (address)",
+    "function paused() view returns (bool)",
+    "function memberCount() view returns (uint256)",
+    "function getMembers() view returns (address[])",
+    "function getAllowedTokens() view returns (address[])",
+    "function allowedToken(address) view returns (bool)",
+    "function pendingRewards(address) view returns (uint256)",
+    "function totalPendingRewards() view returns (uint256)",
+    "function tokenPending(address,address) view returns (uint256)",
+    "function totalTokenPending(address) view returns (uint256)",
+    "function getStats() view returns (uint256,uint256,uint256,uint256)",
+    "function getTokenStats(address) view returns (uint256,uint256,uint256,uint256)",
+    "function triggerDistribution() payable",
+    "function triggerTokenDistribution(address)",
+    "function triggerAllTokenDistribution() returns (uint256)",
+    "function claimPending()",
+    "function claimTokenPending(address)",
+    "function addMember(address)",
+    "function addMembers(address[])",
+    "function removeMember(address)",
+    "function setAllowedToken(address,bool)",
+    "function pause()",
+    "function unpause()",
+    "function setStakingPool(address)"
+  ];
+
+  var ERC20_ABI = [
+    "function balanceOf(address) view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)"
+  ];
+
+  var readProvider = null;
+  var walletProvider = null;
+  var signer = null;
+  var account = null;
+  var address = PRESETS[0].address;
+  var readContract = null;
+  var writeContract = null;
+  var tokenMeta = {};
+  var state = { members: [], tokens: [], stats: null, tokenStats: {}, bnbPending: 0n, totalBnbPending: 0n };
+
+  function provider() {
+    if (!readProvider) {
+      readProvider = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID, { staticNetwork: true });
+    }
+    return walletProvider || readProvider;
+  }
+
+  function bindRead() {
+    readContract = new ethers.Contract(address, DISTRIBUTOR_ABI, provider());
+  }
+
+  function short(a) {
+    return a ? a.slice(0, 6) + "…" + a.slice(-4) : "—";
+  }
+
+  function link(a, text) {
+    return '<a href="' + EXPLORER + "/address/" + a + '" target="_blank" rel="noreferrer">' + (text || a) + "</a>";
+  }
+
+  function fmtUnits(v, decimals) {
+    var s = ethers.formatUnits(v, decimals === undefined ? 18 : decimals);
+    var n = Number(s);
+    if (!isFinite(n)) return s;
+    return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  }
+
+  function ok(id, text) {
+    var el = $(id);
+    el.className = "msg ok";
+    el.textContent = text;
+  }
+
+  function fail(id, text) {
+    var el = $(id);
+    el.className = "msg err";
+    el.textContent = text;
+  }
+
+  function clearMsg(id) {
+    var el = $(id);
+    el.className = "msg";
+    el.textContent = "";
+  }
+
+  function note(id, text) {
+    var el = $(id);
+    el.className = "muted";
+    el.textContent = text;
+  }
+
+  function errText(e) {
+    return (e && (e.shortMessage || e.reason || e.message)) || String(e);
+  }
+
+  async function connect() {
+    if (!window.ethereum) {
+      fail("contractMsg", "没有检测到钱包插件");
+      return;
+    }
+    try {
+      var browserProvider = new ethers.BrowserProvider(window.ethereum);
+      await browserProvider.send("eth_requestAccounts", []);      var net = await browserProvider.getNetwork();
+      if (Number(net.chainId) !== CHAIN_ID) {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x" + CHAIN_ID.toString(16) }]
+          });
+        } catch (e) {
+          fail("contractMsg", "请先把钱包切换到 BNB Smart Chain");
+          return;
+        }
+      }
+      signer = await browserProvider.getSigner();
+      account = await signer.getAddress();
+      walletProvider = browserProvider;
+      bindRead();
+      writeContract = new ethers.Contract(address, DISTRIBUTOR_ABI, signer);
+      $("chainBadge").textContent = short(account);
+      $("chainBadge").classList.add("ok");
+      $("connectBtn").textContent = "已连接";
+      $("footerStatus").textContent = "已连接 " + account;
+      clearMsg("contractMsg");
+      await refresh();
+    } catch (e) {
+      fail("contractMsg", "连接失败：" + errText(e));
+    }
+  }
+
+  async function loadAddress(addr) {
+    if (!ethers.isAddress(addr)) {
+      fail("contractMsg", "地址格式不正确");
+      return;
+    }
+    address = ethers.getAddress(addr);
+    bindRead();
+    writeContract = signer ? new ethers.Contract(address, DISTRIBUTOR_ABI, signer) : null;
+    tokenMeta = {};
+    clearMsg("contractMsg");
+    try {
+      var code = await provider().getCode(address);
+      if (code === "0x") {
+        fail("contractMsg", "该地址没有合约代码");
+        return;
+      }
+    } catch (e) {
+      fail("contractMsg", "读取合约失败：" + errText(e));
+      return;
+    }
+    await refresh();
+  }
+
+  async function readAll() {
+    var c = readContract;
+    var results = await Promise.all([
+      c.getStats(),
+      c.getMembers(),
+      c.getAllowedTokens(),
+      c.paused(),
+      c.owner(),
+      c.stakingPool(),
+      c.totalPendingRewards(),
+      c.TRIGGER_FEE(),
+      c.MAX_MEMBERS()
+    ]);
+    var stats = results[0];
+    var members = Array.prototype.slice.call(results[1]);
+    var tokens = Array.prototype.slice.call(results[2]);
+
+    state.stats = {
+      balance: stats[0],
+      memberCount: Number(stats[1]),
+      remaining: Number(stats[2]),
+      perShare: stats[3]
+    };
+    state.members = members.map(function (m) { return ethers.getAddress(m); });
+    state.tokens = tokens.map(function (t) { return ethers.getAddress(t); });
+    state.paused = results[3];
+    state.owner = ethers.getAddress(results[4]);
+    state.stakingPool = ethers.getAddress(results[5]);
+    state.totalBnbPending = results[6];
+    state.triggerFee = results[7];
+    state.maxMembers = Number(results[8]);
+
+    var pendingCalls = state.members.map(function (m) { return c.pendingRewards(m); });
+    var pending = await Promise.all(pendingCalls);
+    state.bnbPending = account
+      ? state.members.indexOf(ethers.getAddress(account)) >= 0
+        ? pending[state.members.indexOf(ethers.getAddress(account))]
+        : 0n
+      : 0n;
+
+    var tokenStats = {};
+    for (var i = 0; i < state.tokens.length; i++) {
+      var t = state.tokens[i];
+      var meta = tokenMeta[t];
+      if (!meta) {
+        meta = { decimals: 18, symbol: "TOKEN" };
+        try {
+          var erc20 = new ethers.Contract(t, ERC20_ABI, provider());
+          var pair = await Promise.all([erc20.decimals(), erc20.symbol()]);
+          meta = { decimals: Number(pair[0]), symbol: pair[1] };
+        } catch (e) {
+          meta = { decimals: 18, symbol: short(t) };
+        }
+        tokenMeta[t] = meta;
+      }
+      var ts = await c.getTokenStats(t);
+      var totalPend = await c.totalTokenPending(t);
+      var mine = 0n;
+      if (account) {
+        try { mine = await c.tokenPending(t, account); } catch (e) { mine = 0n; }
+      }
+      tokenStats[t] = {
+        balance: ts[0],
+        remaining: Number(ts[2]),
+        perShare: ts[3],
+        totalPending: totalPend,
+        mine: mine,
+        decimals: meta.decimals,
+        symbol: meta.symbol
+      };
+    }
+    state.tokenStats = tokenStats;
+    state.memberPending = state.members.map(function (m, idx) { return pending[idx]; });
+  }
+
+  function renderOverview() {
+    var s = state.stats;
+    var isOwner = account && state.owner && ethers.getAddress(account) === state.owner;
+    var html = "";
+    html += stat("成员数", s.memberCount + " / " + state.maxMembers);
+    html += stat("状态", state.paused ? "已暂停" : "运行中");
+    html += stat("owner", short(state.owner));
+    html += stat("stakingPool", short(state.stakingPool));
+    $("overview").innerHTML = html;
+
+    var bnb = "";
+    bnb += stat("BNB 余额", fmtUnits(s.balance));
+    bnb += stat("本轮每股", fmtUnits(s.perShare));
+    bnb += stat("本轮待发", s.remaining + " 人");
+    bnb += stat("累计 pending", fmtUnits(state.totalBnbPending));
+    $("bnbStats").innerHTML = bnb;
+
+    $("claimBnbBtn").disabled = !account || state.bnbPending === 0n;
+    $("claimBnbBtn").textContent = state.bnbPending > 0n
+      ? "领取我的 BNB pending（" + fmtUnits(state.bnbPending) + "）"
+      : "领取我的 BNB pending";
+
+    $("adminCard").hidden = !isOwner;
+    $("memberSummary").textContent = "共 " + s.memberCount + " 个成员，上限 " + state.maxMembers;
+
+    var t = state.tokenStats;
+    var any = state.tokens.some(function (a) {
+      return t[a] && (t[a].balance > 0n || t[a].remaining > 0);
+    });
+    var hasMembers = s.memberCount > 0;
+    $("triggerAllTokenBtn").disabled = !account || state.tokens.length === 0 || !any || !hasMembers;
+    $("triggerBnbBtn").disabled = !account || !hasMembers;
+    if (!hasMembers) {
+      note("bnbMsg", "成员数为 0，触发会 revert NoMembers：请先在下方添加成员。");
+      note("tokenMsg", "成员数为 0，触发会 revert NoMembers：请先在下方添加成员。");
+    } else {
+      if ($("bnbMsg").className === "muted") clearMsg("bnbMsg");
+      if ($("tokenMsg").className === "muted") clearMsg("tokenMsg");
+    }
+  }
+
+  function stat(k, v) {
+    return '<div class="stat"><div class="k">' + k + '</div><div class="v">' + v + "</div></div>";
+  }
+
+  function renderTokens() {
+    var box = $("tokenCards");
+    if (state.tokens.length === 0) {
+      box.innerHTML = '<p class="muted">白名单为空，请 owner 先加入代币。</p>';
+      return;
+    }
+    var html = "";
+    state.tokens.forEach(function (t) {
+      var ts = state.tokenStats[t];
+      if (!ts) return;
+      var distributable = ts.balance > ts.totalPending && state.stats.memberCount > 0;
+      html += '<div class="item">';
+      html += '<div class="top"><span class="title">' + ts.symbol + " · " + short(t) + "</span>";
+      html += '<span class="tag ' + (ts.remaining > 0 ? "warn" : "ok") + '">' +
+        (ts.remaining > 0 ? "本轮进行中，剩 " + ts.remaining + " 人" : "空闲") + "</span></div>";
+      html += '<div class="sub">余额 ' + fmtUnits(ts.balance, ts.decimals) + " " + ts.symbol +
+        " · 每股 " + fmtUnits(ts.perShare, ts.decimals) +
+        " · 累计 pending " + fmtUnits(ts.totalPending, ts.decimals) + "</div>";
+      if (ts.mine > 0n) {
+        html += '<div class="sub">我的 pending：' + fmtUnits(ts.mine, ts.decimals) + " " + ts.symbol + "</div>";
+      }
+      html += '<div class="row" style="margin-top:8px">';
+      html += '<button data-act="trigger-token" data-token="' + t + '"' +
+        (distributable ? "" : " disabled") + ">分发 " + ts.symbol + "</button>";
+      if (ts.mine > 0n) {
+        html += '<button class="ghost" data-act="claim-token" data-token="' + t + '">领取 pending</button>';
+      }
+      html += "</div></div>";
+    });
+    box.innerHTML = html;
+  }
+
+  function renderMembers() {
+    var box = $("members");
+    if (state.members.length === 0) {
+      box.innerHTML = '<p class="warn">还没有成员，任何分发都会 revert NoMembers。</p>';
+      return;
+    }
+    var me = account ? ethers.getAddress(account) : null;
+    var html = "";
+    state.members.forEach(function (m, i) {
+      var pend = state.memberPending ? state.memberPending[i] : 0n;
+      html += '<div class="item"><div class="top">';
+      html += '<span class="title">' + (i + 1) + ". " + link(m, m) + "</span>";
+      html += '<span class="tag' + (me === m ? " ok" : "") + '">' + (me === m ? "我" : "成员") + "</span>";
+      html += "</div>";
+      if (pend > 0n) {
+        html += '<div class="sub">BNB pending：' + fmtUnits(pend) + "</div>";
+      }
+      html += "</div>";
+    });
+    box.innerHTML = html;
+  }
+
+  async function refresh() {
+    if (!readContract) return;
+    note("overviewMsg", "读取中…");
+    try {
+      await readAll();
+      renderOverview();
+      renderTokens();
+      renderMembers();
+      note("overviewMsg", "已更新 " + new Date().toLocaleTimeString());
+    } catch (e) {
+      note("overviewMsg", "");
+      fail("contractMsg", "读取失败：" + errText(e));
+    }
+  }
+
+  function requireWallet(msgId) {
+    if (!signer || !writeContract) {
+      fail(msgId, "请先连接钱包");
+      return false;
+    }
+    return true;
+  }
+
+  async function gasFor(fn, fallback) {
+    try {
+      var est = await fn();
+      var withBuffer = (est * 125n) / 100n;
+      return withBuffer > BigInt(MIN_TRIGGER_GAS) ? withBuffer : BigInt(MIN_TRIGGER_GAS);
+    } catch (e) {
+      return BigInt(fallback || MIN_TRIGGER_GAS);
+    }
+  }
+
+  async function run(msgId, label, fn) {
+    try {
+      note(msgId, label + "：请在钱包确认…");
+      var tx = await fn();
+      note(msgId, label + "：已提交 " + tx.hash.slice(0, 10) + "… 等待确认");
+      var receipt = await tx.wait();
+      ok(msgId, label + "：成功（区块 " + receipt.blockNumber + "）");
+      await refresh();
+    } catch (e) {
+      fail(msgId, label + "：失败 — " + errText(e));
+    }
+  }
+
+  async function triggerBnb() {
+    if (!requireWallet("bnbMsg")) return;
+    var fee = state.triggerFee || ethers.parseEther("0.001");
+    var gas = await gasFor(function () {
+      return writeContract.triggerDistribution.estimateGas({ value: fee });
+    });
+    await run("bnbMsg", "触发 BNB 分发", function () {
+      return writeContract.triggerDistribution({ value: fee, gasLimit: gas });
+    });
+  }
+
+  async function claimBnb() {
+    if (!requireWallet("bnbMsg")) return;
+    await run("bnbMsg", "领取 BNB pending", function () {
+      return writeContract.claimPending();
+    });
+  }
+
+  async function triggerToken(token) {
+    if (!requireWallet("tokenMsg")) return;
+    var gas = await gasFor(function () {
+      return writeContract.triggerTokenDistribution.estimateGas(token);
+    });
+    await run("tokenMsg", "分发 " + (tokenMeta[token] ? tokenMeta[token].symbol : short(token)), function () {
+      return writeContract.triggerTokenDistribution(token, { gasLimit: gas });
+    });
+  }
+
+  async function triggerAllTokens() {
+    if (!requireWallet("tokenMsg")) return;
+    var gas = await gasFor(function () {
+      return writeContract.triggerAllTokenDistribution.estimateGas();
+    }, 6000000);
+    await run("tokenMsg", "批量分发全部代币", function () {
+      return writeContract.triggerAllTokenDistribution({ gasLimit: gas });
+    });
+  }
+
+  async function claimToken(token) {
+    if (!requireWallet("tokenMsg")) return;
+    await run("tokenMsg", "领取 " + (tokenMeta[token] ? tokenMeta[token].symbol : short(token)) + " pending", function () {
+      return writeContract.claimTokenPending(token);
+    });
+  }
+
+  async function addMembers() {
+    if (!requireWallet("adminMsg")) return;
+    var raw = $("addMembersInput").value;
+    var list = raw.split(/[\s,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (list.length === 0) {
+      fail("adminMsg", "请输入至少一个地址");
+      return;
+    }
+    var bad = list.filter(function (a) { return !ethers.isAddress(a); });
+    if (bad.length > 0) {
+      fail("adminMsg", "地址格式错误：" + bad.join(", "));
+      return;
+    }
+    var normalized = list.map(function (a) { return ethers.getAddress(a); });
+    await run("adminMsg", "添加 " + normalized.length + " 个成员", function () {
+      return writeContract.addMembers(normalized);
+    });
+  }
+
+  async function removeMember() {
+    if (!requireWallet("adminMsg")) return;
+    var a = $("removeMemberInput").value.trim();
+    if (!ethers.isAddress(a)) {
+      fail("adminMsg", "地址格式不正确");
+      return;
+    }
+    await run("adminMsg", "移除成员 " + short(a), function () {
+      return writeContract.removeMember(ethers.getAddress(a));
+    });
+  }
+
+  async function setToken(allowed) {
+    if (!requireWallet("adminMsg")) return;
+    var t = $("tokenInput").value.trim();
+    if (!ethers.isAddress(t)) {
+      fail("adminMsg", "代币地址格式不正确");
+      return;
+    }
+    await run("adminMsg", (allowed ? "加入" : "移出") + "白名单 " + short(t), function () {
+      return writeContract.setAllowedToken(ethers.getAddress(t), allowed);
+    });
+  }
+
+  async function togglePause() {
+    if (!requireWallet("adminMsg")) return;
+    await run("adminMsg", state.paused ? "恢复" : "暂停", function () {
+      return state.paused ? writeContract.unpause() : writeContract.pause();
+    });
+  }
+
+  function initSelect() {
+    var sel = $("contractSelect");
+    sel.innerHTML = PRESETS.map(function (p) {
+      return '<option value="' + p.address + '">' + p.label + " · " + p.address + "</option>";
+    }).join("");
+    sel.value = PRESETS[0].address;
+    sel.addEventListener("change", function () {
+      $("customAddress").value = "";
+      loadAddress(sel.value);
+    });
+  }
+
+  function bind() {
+    $("connectBtn").addEventListener("click", connect);
+    $("refreshBtn").addEventListener("click", refresh);
+    $("loadBtn").addEventListener("click", function () {
+      var v = $("customAddress").value.trim();
+      if (!v) {
+        fail("contractMsg", "请输入地址");
+        return;
+      }
+      loadAddress(v);
+    });
+    $("triggerBnbBtn").addEventListener("click", triggerBnb);
+    $("claimBnbBtn").addEventListener("click", claimBnb);
+    $("triggerAllTokenBtn").addEventListener("click", triggerAllTokens);
+    $("tokenCards").addEventListener("click", function (e) {
+      var btn = e.target.closest("button[data-act]");
+      if (!btn) return;
+      var token = btn.getAttribute("data-token");
+      if (btn.getAttribute("data-act") === "trigger-token") triggerToken(token);
+      else if (btn.getAttribute("data-act") === "claim-token") claimToken(token);
+    });
+    $("addMembersBtn").addEventListener("click", addMembers);
+    $("removeMemberBtn").addEventListener("click", removeMember);
+    $("allowTokenBtn").addEventListener("click", function () { setToken(true); });
+    $("disallowTokenBtn").addEventListener("click", function () { setToken(false); });
+    $("pauseBtn").addEventListener("click", togglePause);
+  }
+
+  initSelect();
+  bind();
+  bindRead();
+  refresh();
+})();
+</script>
+</body>
+</html>
